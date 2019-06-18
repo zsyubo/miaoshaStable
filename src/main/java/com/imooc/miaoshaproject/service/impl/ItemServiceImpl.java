@@ -149,19 +149,16 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean decreaseStock(Integer itemId, Integer amount) {
-//        int affectedRow =  itemStockDOMapper.decreaseStock(itemId,amount);
         // INCRBY rank 20 命令，返回操作成功的数据值
         long result = redisTemplate.opsForValue().increment("promo_item_stock_" + itemId, amount.intValue() * -1);
-        if (result >= 0) {
-//            if ( !mqProducer.asyncReduceStock( itemId, amount ) ){
-//                redisTemplate.opsForValue().increment("promo_item_stock_"+itemId, amount.intValue() );
-//                return false;
-//            }
-
+        if (result > 0) {
             //发送消息成功   更新库存成功
             return true;
+        } else if (result == 0) {
+            // 库存售罄，打上一个tag
+            redisTemplate.opsForValue().set("promo_item_stock_invalid_" + itemId, "true");
+            return true;
         } else {
-//            redisTemplate.opsForValue().increment("promo_item_stock_"+itemId, amount.intValue() );
             this.increaseStock(itemId, amount);
             //更新库存失败
             return false;

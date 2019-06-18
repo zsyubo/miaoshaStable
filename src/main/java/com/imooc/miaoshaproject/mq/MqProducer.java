@@ -1,6 +1,8 @@
 package com.imooc.miaoshaproject.mq;
 
 import com.alibaba.fastjson.JSON;
+import com.imooc.miaoshaproject.dao.StockLogDOMapper;
+import com.imooc.miaoshaproject.dataobject.StockLogDO;
 import com.imooc.miaoshaproject.service.OrderService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.exception.MQBrokerException;
@@ -26,6 +28,8 @@ public class MqProducer {
 
     private TransactionMQProducer transactionMQProducer;
 
+    @Autowired
+    StockLogDOMapper stockLogDOMapper;
 
     @Autowired
     OrderService orderService;
@@ -62,6 +66,10 @@ public class MqProducer {
                     orderService.createOrder(userId, itemId, promoId, amount, stockLogId);
                 } catch (Exception e) {
                     e.printStackTrace();
+                    // 设置对应的log为回滚状态
+                    StockLogDO stockLogDO = stockLogDOMapper.selectByPrimaryKey(stockLogId);
+                    stockLogDO.setStatus(3);
+                    stockLogDOMapper.updateByPrimaryKeySelective(stockLogDO);
                     return LocalTransactionState.ROLLBACK_MESSAGE;
                 }
                 return LocalTransactionState.COMMIT_MESSAGE;
@@ -70,19 +78,31 @@ public class MqProducer {
             @Override
             public LocalTransactionState checkLocalTransaction(MessageExt messageExt) {
                 // 根据是否扣减库存是否成功来判断是否要返回 ROLLBACK_MESSAGE，commit。unknown
-//                String  jsonString = new String(messageExt.getBody());
-//
-//                Map<String, Object> map =  JSON.parseObject(jsonString, Map.class);
-//                Integer itemId = (Integer) map.get("itemId");
-//                Integer amount = (Integer) map.get("amount");
-                System.out.println("checkLocalTransaction：此方法执行了");
-                return null;
+                String jsonString = new String(messageExt.getBody());
+
+                Map<String, Object> map = JSON.parseObject(jsonString, Map.class);
+                Integer itemId = (Integer) map.get("itemId");
+                Integer amount = (Integer) map.get("amount");
+                String stockLogId = map.get("stockLogId").toString();
+
+                StockLogDO stockLogDO = stockLogDOMapper.selectByPrimaryKey(stockLogId);
+                if (stockLogDO == null) {
+                    // 告诉消息中间件，现在这情况我也不知道怎么处理，等会再来问我
+                    // 重试按照重试策略来做。
+                    return LocalTransactionState.UNKNOW;
+                }
+                if (stockLogDO.getStatus() == 2) {
+                    return LocalTransactionState.COMMIT_MESSAGE;
+                } else if (stockLogDO.getStatus() == 1) {
+                    // 没有正常返回
+                    return LocalTransactionState.UNKNOW;
+                }
+                return LocalTransactionState.ROLLBACK_MESSAGE;
             }
         });
     }
 
     //
-    @Deprecated
     /**
      * 事务型同步库存扣减消息
      * @param stockLogId  扣减库存log id

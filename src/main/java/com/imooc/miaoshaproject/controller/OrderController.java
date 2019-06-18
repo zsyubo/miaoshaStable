@@ -56,11 +56,11 @@ public class OrderController extends BaseController {
         if (userModel == null) {
             throw new BusinessException(EmBusinessError.USER_NOT_LOGIN, "用户还未登陆，不能下单");
         }
-
-
-        //UserModel userModel = (UserModel)httpServletRequest.getSession().getAttribute("LOGIN_USER");
-
-//        OrderModel orderModel = orderService.createOrder(userModel.getId(),itemId,promoId,amount);
+        // 判断商品是否售罄
+        boolean value = redisTemplate.hasKey("promo_item_stock_invalid_" + itemId);
+        if (value) {
+            throw new BusinessException(EmBusinessError.STOCK_NOT_ENOUGH);
+        }
 
         // 加入库存流水init状态
         StockLogDO stockLogDO = itemService.initStockLog(itemId, amount);

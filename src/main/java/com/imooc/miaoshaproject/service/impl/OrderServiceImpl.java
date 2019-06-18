@@ -2,8 +2,10 @@ package com.imooc.miaoshaproject.service.impl;
 
 import com.imooc.miaoshaproject.dao.OrderDOMapper;
 import com.imooc.miaoshaproject.dao.SequenceDOMapper;
+import com.imooc.miaoshaproject.dao.StockLogDOMapper;
 import com.imooc.miaoshaproject.dataobject.OrderDO;
 import com.imooc.miaoshaproject.dataobject.SequenceDO;
+import com.imooc.miaoshaproject.dataobject.StockLogDO;
 import com.imooc.miaoshaproject.error.BusinessException;
 import com.imooc.miaoshaproject.error.EmBusinessError;
 import com.imooc.miaoshaproject.service.ItemService;
@@ -39,6 +41,10 @@ public class OrderServiceImpl implements OrderService {
 
     @Autowired
     private OrderDOMapper orderDOMapper;
+
+    @Autowired
+    StockLogDOMapper stockLogDOMapper;
+
 
 
     @Override
@@ -97,20 +103,13 @@ public class OrderServiceImpl implements OrderService {
         //加上商品的销量
         itemService.increaseSales(itemId, amount);
 
-        // 最近一个事务提交后执行方法
-//        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-//            @Override
-//            public void afterCommit() {
-//
-//                // 异步更新库存
-//                if (itemService.asyncDecreaseStock( itemId ,amount )){
-////                    // 如果异步更新失败
-////                    itemService.increaseStock( itemId, amount );
-////                    throw new BusinessException(EmBusinessError.MQ_SEND_FAIL);
-//                }
-//            }
-//        });
-
+        // 设置库存流水状态为成功
+        StockLogDO stockLogDO = stockLogDOMapper.selectByPrimaryKey(stockLogId);
+        if (stockLogDO == null) {
+            throw new BusinessException(EmBusinessError.UNKNOWN_ERROR, "订单流水异常");
+        }
+        stockLogDO.setStatus(2);
+        stockLogDOMapper.updateByPrimaryKeySelective(stockLogDO);
 
         //4.返回前端
         return orderModel;
